@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module>
+  <ModulePrefs title="Gifts-Google AppSpot Hosted" >
+    <Require feature="opensocial-0.7"/>
+    <Require feature="dynamic-height"/>
+  </ModulePrefs>
+  <Content type="html">
+    <![CDATA[
+    <script>
+      var GLOBAL_BASE_URL = 'http://zmorgan-dev.appspot.com';
+      
+      function giveGift() {
+        var gift_key = document.getElementById('nut').value;
+        var receiver_id = document.getElementById('person').value;
+        
+        var req = opensocial.newDataRequest();
+        req.add(req.newFetchPersonRequest('VIEWER'), 'viewer');
+        req.send(postGiftTransactionClosure(receiver_id, gift_key));
+      }
+      function postGiftTransactionClosure(receiver_id, gift_key) {
+        return function(response) {
+          var sender_id = response.get('viewer').getData().getId();
+          var params = {};
+          params[gadgets.io.RequestParameters.AUTHORIZATION] = gadgets.io.AuthorizationType.SIGNED;
+          params[gadgets.io.RequestParameters.METHOD] = gadgets.io.MethodType.POST;
+          post_data = gadgets.io.encodeValues({ 
+              'sender_id' : sender_id,
+              'receiver_id' : receiver_id,
+              'gift_key' : gift_key });
+          params[gadgets.io.RequestParameters.POST_DATA] = post_data;
+          var url = GLOBAL_BASE_URL + '/giftTransactions';
+
+          gadgets.io.makeRequest(url, loadFriends, params);
+        }
+      }
+      function loadFriends() {
+        var req = opensocial.newDataRequest();
+        req.add(req.newFetchPersonRequest('VIEWER'), 'viewer');
+        req.add(req.newFetchPeopleRequest('VIEWER_FRIENDS'), 'viewerFriends');
+        req.send(onLoadFriends);
+      }
+      function onLoadFriends(data) {
+        var viewer=data.get('viewer').getData();
+        var viewerFriends = data.get('viewerFriends').getData();
+       
+        html = new Array();
+        html.push('<select id="person">');
+        viewerFriends.each(function(person) {
+          html.push('<option value="' + person.getId() + '">' + person.getDisplayName() + "</option>");
+          friends[person.getId()] = person.getDisplayName();
+        });
+        html.push('</select>');
+        document.getElementById('friends').innerHTML = html.join('');
+        
+        loadGiftTransactions(viewer,friends);
+      }
+      function loadGiftTransactions(viewer, friends) {
+        var params = {};
+        params[gadgets.io.RequestParameters.AUTHORIZATION] = gadgets.io.AuthorizationType.SIGNED;
+
+        // Get the gift transactions where the VIEWER is the sender
+        var url = GLOBAL_BASE_URL + '/giftTransactions?sender_id=' + viewer.getId();
+        gadgets.io.makeRequest(url, onLoadGiftsGivenClosure(friends), params);
+
+        // Get the gift transactions where the VIEWER is the receiver
+        var url = GLOBAL_BASE_URL + '/giftTransactions?receiver_id=' + viewer.getId();
+        gadgets.io.makeRequest(url, onLoadGiftsReceivedClosure(friends), params);
+      }
+      function onLoadGiftsGivenClosure(friends) {
+        return function(response) {
+          var giftTransactions = gadgets.json.parse(response.data);    
+          var html = new Array();
+          html.push('You have given:');
+          html.push('<ul>');
+          for (var i=0; i<giftTransactions.length; i++) {
+            html.push('<li>' + friends[giftTransactions[i].receiver_id] + ' ');
+            html.push(giftTransactions[i].gift_name + '</li>');
+          }
+          html.push('</ul>');
+          document.getElementById('given').innerHTML = html.join('');
+          gadgets.window.adjustHeight();
+        }
+      }
+      function onLoadGiftsReceivedClosure(friends) {
+        return function(response) {
+          var giftTransactions = gadgets.json.parse(response.data);    
+          var html = new Array();
+          html.push('You have received:<ul>');
+          for (var i=0; i<giftTransactions.length; i++) {
+            html.push('<li>' + giftTransactions[i].gift_name + ' from ');
+            html.push(friends[giftTransactions[i].sender_id] + '</li>');
+          }
+          html.push('</ul>');
+          document.getElementById('received').innerHTML = html.join('');
+
+          gadgets.window.adjustHeight();
+        }
+      }
+      function loadGifts() {
+        var params = {};
+        params[gadgets.io.RequestParameters.AUTHORIZATION] = gadgets.io.AuthorizationType.SIGNED;
+        params[gadgets.io.RequestParameters.CONTENT_TYPE] = gadgets.io.ContentType.JSON;
+        var url = GLOBAL_BASE_URL + '/gifts';
+
+        gadgets.io.makeRequest(url, onLoadGifts, params);
+      }
+      function onLoadGifts(response) {
+        var gifts = response.data;
+        var html = new Array();
+        html.push('<select id="nut">');
+        for (var i = 0; i < gifts.length; i++) {
+          html.push('<option value="' + gifts[i].key + '">' + gifts[i].name + '</option>');
+        }
+        html.push('</select>');
+        document.getElementById('gifts').innerHTML = html.join('');
+      }
+      function init() {
+        loadFriends();
+        loadGifts();
+      }
+      gadgets.util.registerOnLoadHandler(init);
+
+    </script>
+    Give <span id="gifts"></span> to <span id="friends"></span>.<a href="javascript:void(0);" onclick='giveGift();'>Give!</a>      
+    <div id="given"></div>
+    <div id="received"</div>
+    ]]>
+  </Content>
+</Module>
